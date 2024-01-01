@@ -1,0 +1,205 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Simple Grow Game</title>
+<style>
+  body { margin: 0; }
+  canvas { display: block; background: #f0f0f0; }
+</style>
+</head>
+<body>
+<button type="hidden" id="startButton">ゲームスタート</button>
+<canvas id="gameCanvas"></canvas>
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const backgroundImage = new Image();
+backgroundImage.src = 'retro.png';
+let gameActive = false;
+
+function startGame() {
+    gameActive = true;
+    update();
+}
+
+document.getElementById('startButton').addEventListener('click', startGame);
+
+document.addEventListener('keydown', function(e) {
+    if (e.code === 'Space' && !gameActive) {
+        startGame();
+    }
+});
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+let player = {
+    x: canvas.width / 2,
+    y: canvas.height / 2,
+    size: 30,
+    speed: 2,
+    angle: 0,
+    dx: 0,
+    dy: 0
+};
+
+let enemies = [];
+let gameFrame = 0;
+
+function createEnemy() {
+    const size = Math.random() * (player.size * 1.5) + 10;
+    const x = Math.random() < 0.5 ? 0 : canvas.width;
+    const y = Math.random() < 0.5 ? 0 : canvas.height;
+    const angle = Math.atan2(player.y - y, player.x - x);
+    const speed = Math.random() * 2 + 1;
+    enemies.push({ x, y, size, dx: Math.cos(angle) * speed, dy: Math.sin(angle) * speed });
+}
+
+function drawEnemies() {
+    enemies.forEach(enemy => {
+        enemy.x += enemy.dx;
+        enemy.y += enemy.dy;
+
+        if (enemy.size > player.size) {
+            let gradient = ctx.createRadialGradient(enemy.x, enemy.y, 0, enemy.x, enemy.y, enemy.size);
+            gradient.addColorStop(0, 'rgba(255, 255, 255, 1)'); // Inner color
+            gradient.addColorStop(1, 'rgba(255, 0, 0, 0.7)'); // Outer color for larger enemies
+            ctx.fillStyle = gradient;
+        } else {
+            let gradient = ctx.createRadialGradient(enemy.x, enemy.y, 0, enemy.x, enemy.y, enemy.size);
+            gradient.addColorStop(0, 'rgba(255, 255, 255, 1)'); // Inner color
+            gradient.addColorStop(1, 'rgba(0, 255, 0, 0.7)'); // Outer color for smaller enemies
+            ctx.fillStyle = gradient;
+        }
+        ctx.beginPath();
+        ctx.arc(enemy.x, enemy.y, enemy.size, 0, Math.PI * 2);
+        ctx.fill();
+    });
+}
+
+function update() {
+    if (!gameActive) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
+    gameFrame++;
+
+    player.x += player.dx;
+    player.y += player.dy;
+
+    // Bounce player off canvas edges
+    if (player.x < player.size || player.x > canvas.width - player.size) {
+        player.dx *= -1;
+    }
+    if (player.y < player.size || player.y > canvas.height - player.size) {
+        player.dy *= -1;
+    }
+
+    drawPlayer();
+    drawEnemies();
+
+    if (gameFrame % 100 === 0) {
+        createEnemy();
+    }
+
+    enemies = enemies.filter(enemy => {
+        const dx = enemy.x - player.x;
+        const dy = enemy.y - player.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance < player.size + enemy.size) {
+            if (player.size > enemy.size) {
+                player.size += enemy.size * 0.1;
+                return false;
+            } else {
+                // Game Over
+                gameOver()
+                return false;
+            }
+        }
+        return true;
+    });
+
+    requestAnimationFrame(update);
+}
+
+function setDirection(e) {
+    const rect = canvas.getBoundingClientRect();
+    const controllerX = e.clientX - rect.left;
+    const controllerY = e.clientY - rect.top;
+    player.angle = Math.atan2(controllerY - player.y, controllerX - player.x);
+    player.dx = player.speed * Math.cos(player.angle);
+    player.dy = player.speed * Math.sin(player.angle);
+}
+
+canvas.addEventListener('click', setDirection);
+
+update();
+
+function drawPlayer() {
+    // Create a gradient for the neon effect
+    let gradient = ctx.createRadialGradient(player.x, player.y, 0, player.x, player.y, player.size);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)'); // Inner color (bright center)
+    gradient.addColorStop(1, 'rgba(0, 255, 255, 0.5)'); // Outer color (fading glow)
+
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.size, 0, Math.PI * 2, true);
+    ctx.fill();
+
+    // Add a subtle animation effect
+    player.size += Math.sin(Date.now() / 200) * 0.1;
+}
+
+function adjustViewport() {
+    const scale = Math.max(1, 30 / player.size); // Adjust the scale factor based on player size
+    ctx.setTransform(scale, 0, 0, scale, canvas.width / 2, canvas.height / 2);
+    ctx.translate(-player.x, -player.y);
+}
+
+function drawController() {
+    // Draw a semi-transparent circle for directional input
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.beginPath();
+    ctx.arc(touchX, touchY, 50, 0, Math.PI * 2, true); // touchX and touchY to be set based on touch input
+    ctx.fill();
+}
+
+
+function drawBackground() {
+    if (!backgroundImage.complete) {
+        // If the image is not yet loaded, set a flag to try drawing again
+        requestAnimationFrame(drawBackground);
+        return;
+    }
+    ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
+}
+// Ensure background is loaded and drawn initially
+window.onload = function() {
+    drawBackground();
+};
+
+function drawCharacter(character, innerColor, outerColor) {
+    let gradient = ctx.createRadialGradient(character.x, character.y, 0, character.x, character.y, character.size);
+    gradient.addColorStop(0, innerColor); // Bright center
+    gradient.addColorStop(1, outerColor); // Soft glow
+
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(character.x, character.y, character.size, 0, Math.PI * 2, true);
+    ctx.fill();
+}
+
+
+function gameOver() {
+    // Display game over screen with reload button
+    // Placeholder for actual implementation
+    if (confirm('Game Over. Reload?')) {
+        window.location.reload(); // Reload the game
+    }
+}
+
+</script>
+</body>
+</html>
